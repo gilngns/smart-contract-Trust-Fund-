@@ -1,0 +1,28 @@
+{
+  "name": "trustfund-Contract",
+  "version": "1.0.0",
+  "description": "TrustFund Escrow Smart Contract — XIDR Crowdfunding Platform",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "coverage": "hardhat coverage",
+    "deploy:amoy": "hardhat run scripts/deploy.js --network amoy",
+    "deploy:polygon": "hardhat run scripts/deploy.js --network polygon",
+    "upgrade:amoy": "hardhat run scripts/upgrade.js --network amoy",
+    "upgrade:polygon": "hardhat run scripts/upgrade.js --network polygon",
+    "verify:amoy": "hardhat verify --network amoy",
+    "verify:polygon": "hardhat verify --network polygon",
+    "gas-report": "RUN_GAS_REPORTER=true hardhat test",
+    "clean": "hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.0.0",
+    "hardhat": "^2.22.0",
+    "dotenv": "^16.4.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "@openzeppelin/contracts-upgradeable": "^5.1.0"
+  }
+}
