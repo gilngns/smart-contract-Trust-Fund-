@@ -17,10 +17,9 @@ contract MockXIDR is ERC20, Ownable {
     /// @notice XIDR menggunakan 6 desimal (sama seperti USDC/USDT)
     uint8 private constant DECIMALS = 6;
 
-    constructor(address initialOwner)
-        ERC20("Mock XIDR", "XIDR")
-        Ownable(initialOwner)
-    {}
+    constructor(
+        address initialOwner
+    ) ERC20("Mock XIDR", "XIDR") Ownable(initialOwner) {}
 
     /**
      * @notice Mint token XIDR ke alamat tertentu.

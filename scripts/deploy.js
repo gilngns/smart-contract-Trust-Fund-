@@ -42,9 +42,20 @@ async function main() {
   // ── Resolve alamat berdasarkan network ─────────────────────────────────────
   const isLocalOrTest = ["hardhat", "localhost"].includes(network.name);
 
-  const xidrAddress = isLocalOrTest
-    ? process.env.MOCK_XIDR_ADDRESS // Diisi setelah deploy MockXIDR
-    : process.env.XIDR_TOKEN_ADDRESS || XIDR_MAINNET;
+  let xidrAddress;
+
+  if (isLocalOrTest) {
+    console.log("\n  Deploying MockXIDR for local testing...");
+
+    const MockXIDR = await ethers.getContractFactory("MockXIDR");
+    const mock = await MockXIDR.deploy(deployer.address);
+    await mock.waitForDeployment();
+
+    xidrAddress = await mock.getAddress();
+    console.log(`  Mock XIDR deployed: ${xidrAddress}`);
+  } else {
+    xidrAddress = process.env.XIDR_TOKEN_ADDRESS || XIDR_MAINNET;
+  }
 
   const backendWallet = process.env.BACKEND_WALLET;
   const adminMultisig = process.env.ADMIN_MULTISIG;

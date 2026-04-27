@@ -9,8 +9,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title  TrustFundEscrow
@@ -43,9 +43,9 @@ contract TrustFundEscrow is
     Initializable,
     UUPSUpgradeable,
     AccessControlUpgradeable,
-    PausableUpgradeable,
-    ReentrancyGuardUpgradeable
+    PausableUpgradeable
 {
+    using SafeERC20 for IERC20;
     // =========================================================
     // SECTION 1 — ROLES & CONSTANTS
     // =========================================================
@@ -54,7 +54,7 @@ contract TrustFundEscrow is
     bytes32 public constant BACKEND_ROLE = keccak256("BACKEND_ROLE");
 
     /// @notice Role untuk sistem AI oracle yang memvalidasi dokumen dan milestone
-    bytes32 public constant ORACLE_ROLE  = keccak256("ORACLE_ROLE");
+    bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
 
     /// @notice Role untuk upgrade contract (dipisah dari BACKEND_ROLE demi keamanan)
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
@@ -111,15 +111,16 @@ contract TrustFundEscrow is
      *                 state (uint8) + createdAt (uint32) — packed
      */
     struct Campaign {
-        bytes32 campaignId;      // ID unik dari database backend (bytes32 hemat gas vs string)
-        uint128 targetAmount;    // Target donasi dalam satuan terkecil XIDR (6 desimal)
-        uint128 totalCollected;  // Total XIDR yang sudah masuk ke contract
+        bytes32 campaignId; // ID unik dari database backend (bytes32 hemat gas vs string)
+        uint128 targetAmount; // Target donasi dalam satuan terkecil XIDR (6 desimal)
+        uint128 totalCollected; // Total XIDR yang sudah masuk ke contract
         uint128 milestoneAmount; // Jumlah XIDR per milestone yang dirilis
-        uint128 advanceAmount;   // Jumlah XIDR advance payment (uang muka)
-        uint32  createdAt;       // Unix timestamp pembuatan (cukup uint32 s/d tahun 2106)
-        uint8   totalMilestones; // Total jumlah milestone kampanye
-        uint8   currentMilestone;// Milestone yang sedang berjalan (0-indexed)
-        CampaignState state;     // State saat ini
+        uint128 advanceAmount; // Jumlah XIDR advance payment (uang muka)
+        uint32 createdAt; // Unix timestamp pembuatan (cukup uint32 s/d tahun 2106)
+        uint8 totalMilestones; // Total jumlah milestone kampanye
+        uint8 currentMilestone; // Milestone yang sedang berjalan (0-indexed)
+        CampaignState state; // State saat ini
+        bool advanceReleased; // Flag untuk menandai apakah advance sudah dirilis (untuk validasi logika)
     }
 
     // =========================================================
@@ -138,6 +139,23 @@ contract TrustFundEscrow is
     /// @notice Mapping dari campaignId → saldo XIDR yang terkunci di contract ini
     mapping(bytes32 => uint256) public lockedFunds;
 
+    /// @notice Reentrancy guard flag (1 = not entered, 2 = entered)
+    /// @dev Implementasi manual karena ReentrancyGuardUpgradeable dihapus di OZ v5
+    uint256 private _reentrancyStatus;
+
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    modifier nonReentrant() {
+        require(
+            _reentrancyStatus != _ENTERED,
+            "ReentrancyGuard: reentrant call"
+        );
+        _reentrancyStatus = _ENTERED;
+        _;
+        _reentrancyStatus = _NOT_ENTERED;
+    }
+
     // =========================================================
     // SECTION 5 — EVENTS
     // =========================================================
@@ -151,9 +169,11 @@ contract TrustFundEscrow is
     event CampaignCreated(
         bytes32 indexed campaignId,
         uint256 targetAmount,
-        uint8   totalMilestones
+        uint8 totalMilestones
     );
 
+    event EmergencyWithdraw(address token, uint256 amount);
+    
     /**
      * @notice Dipancarkan setiap kali backend men-deposit XIDR ke kampanye.
      * @param campaignId    ID kampanye
@@ -165,7 +185,7 @@ contract TrustFundEscrow is
         bytes32 indexed campaignId,
         uint256 amount,
         uint256 totalCollected,
-        bool    isFunded
+        bool isFunded
     );
 
     /**
@@ -177,9 +197,9 @@ contract TrustFundEscrow is
      */
     event OracleValidated(
         bytes32 indexed campaignId,
-        uint8   milestone,
-        bool    validated,
-        uint8   score
+        uint8 milestone,
+        bool validated,
+        uint8 score
     );
 
     /**
@@ -194,6 +214,8 @@ contract TrustFundEscrow is
         address recipient
     );
 
+    event MilestoneSubmitted(bytes32 indexed campaignId, uint8 milestone);
+
     /**
      * @notice Dipancarkan ketika dana milestone dirilis ke backend.
      * @param campaignId    ID kampanye
@@ -204,10 +226,10 @@ contract TrustFundEscrow is
      */
     event MilestoneReleased(
         bytes32 indexed campaignId,
-        uint8   milestone,
+        uint8 milestone,
         uint256 amount,
         address recipient,
-        bool    isCompleted
+        bool isCompleted
     );
 
     /**
@@ -217,9 +239,9 @@ contract TrustFundEscrow is
      * @param newState    State baru
      */
     event CampaignStateChanged(
-        bytes32      indexed campaignId,
-        CampaignState        oldState,
-        CampaignState        newState
+        bytes32 indexed campaignId,
+        CampaignState oldState,
+        CampaignState newState
     );
 
     /**
@@ -247,12 +269,20 @@ contract TrustFundEscrow is
 
     error CampaignAlreadyExists(bytes32 campaignId);
     error CampaignNotFound(bytes32 campaignId);
-    error InvalidState(bytes32 campaignId, CampaignState current, CampaignState required);
+    error InvalidState(
+        bytes32 campaignId,
+        CampaignState current,
+        CampaignState required
+    );
     error InvalidAmount(uint256 provided, string reason);
     error InvalidMilestoneConfig(string reason);
     error ZeroAddress();
     error TransferFailed();
-    error InsufficientLockedFunds(bytes32 campaignId, uint256 available, uint256 requested);
+    error InsufficientLockedFunds(
+        bytes32 campaignId,
+        uint256 available,
+        uint256 requested
+    );
     error MilestoneAlreadyCompleted(bytes32 campaignId);
 
     // =========================================================
@@ -299,15 +329,18 @@ contract TrustFundEscrow is
         address _admin
     ) external initializer {
         // Validasi input dasar
-        if (_xidrToken == address(0) || _backendWallet == address(0) || _admin == address(0)) {
+        if (
+            _xidrToken == address(0) ||
+            _backendWallet == address(0) ||
+            _admin == address(0)
+        ) {
             revert ZeroAddress();
         }
 
         // Init semua parent contracts (urutan penting!)
-        __UUPSUpgradeable_init();
         __AccessControl_init();
         __Pausable_init();
-        __ReentrancyGuard_init();
+        _reentrancyStatus = _NOT_ENTERED;
 
         // Set token XIDR
         xidr = IERC20(_xidrToken);
@@ -345,41 +378,40 @@ contract TrustFundEscrow is
         uint128 targetAmount,
         uint128 advanceAmount,
         uint128 milestoneAmount,
-        uint8   totalMilestones
-    )
-        external
-        onlyRole(BACKEND_ROLE)
-        whenNotPaused
-    {
+        uint8 totalMilestones
+    ) external onlyRole(BACKEND_ROLE) whenNotPaused {
         // Cegah duplikat
         if (campaigns[campaignId].createdAt != 0) {
             revert CampaignAlreadyExists(campaignId);
         }
 
         // Validasi konfigurasi
-        if (targetAmount == 0) revert InvalidAmount(targetAmount, "target cannot be zero");
+        if (targetAmount == 0)
+            revert InvalidAmount(targetAmount, "target cannot be zero");
         if (totalMilestones == 0 || totalMilestones > 20) {
             revert InvalidMilestoneConfig("totalMilestones must be 1-20");
         }
 
         // Validasi bahwa advance + (milestones * milestoneAmount) <= targetAmount
         // Ini mencegah konfigurasi yang akan melebihi dana terkumpul
-        uint256 totalPayout = uint256(advanceAmount) + (uint256(milestoneAmount) * totalMilestones);
+        uint256 totalPayout = uint256(advanceAmount) +
+            (uint256(milestoneAmount) * totalMilestones);
         if (totalPayout > targetAmount) {
             revert InvalidMilestoneConfig("payout config exceeds targetAmount");
         }
 
         // Simpan data kampanye
         campaigns[campaignId] = Campaign({
-            campaignId:       campaignId,
-            targetAmount:     targetAmount,
-            totalCollected:   0,
-            milestoneAmount:  milestoneAmount,
-            advanceAmount:    advanceAmount,
-            createdAt:        uint32(block.timestamp),
-            totalMilestones:  totalMilestones,
+            campaignId: campaignId,
+            targetAmount: targetAmount,
+            totalCollected: 0,
+            milestoneAmount: milestoneAmount,
+            advanceAmount: advanceAmount,
+            createdAt: uint32(block.timestamp),
+            totalMilestones: totalMilestones,
             currentMilestone: 0,
-            state:            CampaignState.ACTIVE
+            state: CampaignState.ACTIVE,
+            advanceReleased: false
         });
 
         emit CampaignCreated(campaignId, targetAmount, totalMilestones);
@@ -399,7 +431,10 @@ contract TrustFundEscrow is
      * @param campaignId  ID kampanye tujuan
      * @param amount      Jumlah XIDR yang dideposit (satuan terkecil)
      */
-    function depositXIDR(bytes32 campaignId, uint128 amount)
+    function depositXIDR(
+        bytes32 campaignId,
+        uint128 amount
+    )
         external
         onlyRole(BACKEND_ROLE)
         whenNotPaused
@@ -410,15 +445,22 @@ contract TrustFundEscrow is
 
         // Deposit hanya diizinkan saat ACTIVE
         if (campaign.state != CampaignState.ACTIVE) {
-            revert InvalidState(campaignId, campaign.state, CampaignState.ACTIVE);
+            revert InvalidState(
+                campaignId,
+                campaign.state,
+                CampaignState.ACTIVE
+            );
         }
 
         if (amount == 0) revert InvalidAmount(amount, "amount cannot be zero");
 
+        if (xidr.allowance(msg.sender, address(this)) < amount) {
+            revert InvalidAmount(amount, "insufficient allowance");
+        }
+
         // Tarik XIDR dari wallet backend ke contract ini
         // transferFrom akan revert otomatis jika gagal (allowance tidak cukup, dll.)
-        bool success = xidr.transferFrom(msg.sender, address(this), amount);
-        if (!success) revert TransferFailed();
+        xidr.safeTransferFrom(msg.sender, address(this), amount);
 
         // Update saldo terkumpul (unchecked aman karena uint128 max >> kebutuhan praktis)
         unchecked {
@@ -459,44 +501,67 @@ contract TrustFundEscrow is
      * @param validated   true = lolos validasi, false = indikasi fraud
      * @param score       Skor kepercayaan AI (0-100, untuk audit trail)
      */
-    function oracleCallback(bytes32 campaignId, bool validated, uint8 score)
-        external
-        onlyRole(ORACLE_ROLE)
-        whenNotPaused
-        campaignExists(campaignId)
-    {
+    function oracleCallback(
+        bytes32 campaignId,
+        bool validated,
+        uint8 score
+    ) external onlyRole(ORACLE_ROLE) whenNotPaused campaignExists(campaignId) {
         Campaign storage campaign = campaigns[campaignId];
 
         // Validasi bisa masuk dari state FUNDED atau MILESTONE_SUBMITTED
-        bool isValidState = (
-            campaign.state == CampaignState.FUNDED ||
-            campaign.state == CampaignState.MILESTONE_SUBMITTED
-        );
+        bool isValidState = (campaign.state == CampaignState.FUNDED ||
+            campaign.state == CampaignState.MILESTONE_SUBMITTED);
 
         // Fraud bisa dideteksi dari state APAPUN kecuali COMPLETED
         if (!validated) {
             if (campaign.state == CampaignState.COMPLETED) {
-                revert InvalidState(campaignId, campaign.state, CampaignState.FROZEN);
+                revert InvalidState(
+                    campaignId,
+                    campaign.state,
+                    CampaignState.FROZEN
+                );
             }
             // Freeze segera
             _changeState(campaign, CampaignState.FROZEN);
-            emit OracleValidated(campaignId, campaign.currentMilestone, false, score);
+            emit OracleValidated(
+                campaignId,
+                campaign.currentMilestone,
+                false,
+                score
+            );
             return;
         }
 
         // Untuk validasi positif, state sumber harus FUNDED atau MILESTONE_SUBMITTED
         if (!isValidState) {
-            revert InvalidState(campaignId, campaign.state, CampaignState.FUNDED);
+            revert InvalidState(
+                campaignId,
+                campaign.state,
+                CampaignState.FUNDED
+            );
+        }
+
+        if (campaign.state == CampaignState.VALIDATED) {
+            revert InvalidState(
+                campaignId,
+                campaign.state,
+                CampaignState.FUNDED
+            );
         }
 
         _changeState(campaign, CampaignState.VALIDATED);
 
-        emit OracleValidated(campaignId, campaign.currentMilestone, true, score);
+        emit OracleValidated(
+            campaignId,
+            campaign.currentMilestone,
+            true,
+            score
+        );
     }
 
     /**
      * @notice Merilis advance payment (uang muka) ke wallet backend.
-     * @dev    Hanya bisa dipanggil saat state VALIDATED dan currentMilestone == 0
+     * @dev    Hanya bisa dipanggil saat state VALIDATED dan advance hanya boleh dirilis sekali (dikontrol oleh advanceReleased flag)
      *         (artinya ini adalah release pertama, yaitu advance).
      *         Setelah advance dirilis, state berpindah ke ADVANCE_PAID.
      *
@@ -504,7 +569,9 @@ contract TrustFundEscrow is
      *
      * @param campaignId  ID kampanye yang advance-nya akan dirilis
      */
-    function releaseAdvance(bytes32 campaignId)
+    function releaseAdvance(
+        bytes32 campaignId
+    )
         external
         onlyRole(BACKEND_ROLE)
         whenNotPaused
@@ -515,7 +582,7 @@ contract TrustFundEscrow is
         Campaign storage campaign = campaigns[campaignId];
 
         // releaseAdvance hanya valid sebelum milestone pertama dimulai
-        if (campaign.currentMilestone != 0) {
+        if (campaign.advanceReleased) {
             revert InvalidMilestoneConfig("advance already released");
         }
 
@@ -525,7 +592,11 @@ contract TrustFundEscrow is
         // (beberapa kampanye mungkin tidak punya advance payment)
         if (amount > 0) {
             if (lockedFunds[campaignId] < amount) {
-                revert InsufficientLockedFunds(campaignId, lockedFunds[campaignId], amount);
+                revert InsufficientLockedFunds(
+                    campaignId,
+                    lockedFunds[campaignId],
+                    amount
+                );
             }
 
             unchecked {
@@ -533,11 +604,12 @@ contract TrustFundEscrow is
             }
 
             // Transfer XIDR ke backend wallet
-            bool success = xidr.transfer(backendWallet, amount);
-            if (!success) revert TransferFailed();
+            xidr.safeTransfer(backendWallet, amount);
 
             emit AdvanceReleased(campaignId, amount, backendWallet);
         }
+
+        campaign.advanceReleased = true;
 
         _changeState(campaign, CampaignState.ADVANCE_PAID);
     }
@@ -550,24 +622,29 @@ contract TrustFundEscrow is
      *
      * @param campaignId  ID kampanye
      */
-    function submitMilestone(bytes32 campaignId)
-        external
-        onlyRole(BACKEND_ROLE)
-        whenNotPaused
-        campaignExists(campaignId)
-    {
+    function submitMilestone(
+        bytes32 campaignId
+    ) external onlyRole(BACKEND_ROLE) whenNotPaused campaignExists(campaignId) {
         Campaign storage campaign = campaigns[campaignId];
 
         // Milestone hanya bisa disubmit dari state ADVANCE_PAID
         if (campaign.state != CampaignState.ADVANCE_PAID) {
-            revert InvalidState(campaignId, campaign.state, CampaignState.ADVANCE_PAID);
+            revert InvalidState(
+                campaignId,
+                campaign.state,
+                CampaignState.ADVANCE_PAID
+            );
         }
 
         if (campaign.currentMilestone >= campaign.totalMilestones) {
             revert MilestoneAlreadyCompleted(campaignId);
         }
 
+        uint8 milestone = campaign.currentMilestone;
+
         _changeState(campaign, CampaignState.MILESTONE_SUBMITTED);
+
+        emit MilestoneSubmitted(campaignId, milestone);
     }
 
     /**
@@ -585,7 +662,9 @@ contract TrustFundEscrow is
      *
      * @param campaignId  ID kampanye yang milestone-nya akan dirilis
      */
-    function releaseMilestone(bytes32 campaignId)
+    function releaseMilestone(
+        bytes32 campaignId
+    )
         external
         onlyRole(BACKEND_ROLE)
         whenNotPaused
@@ -600,7 +679,16 @@ contract TrustFundEscrow is
         }
 
         uint256 amount = campaign.milestoneAmount;
-        bool isLastMilestone = (campaign.currentMilestone + 1) >= campaign.totalMilestones;
+
+        if (
+            campaign.milestoneAmount == 0 &&
+            campaign.currentMilestone + 1 < campaign.totalMilestones
+        ) {
+            revert InvalidAmount(0, "invalid milestone amount");
+        }
+
+        bool isLastMilestone = (campaign.currentMilestone + 1) >=
+            campaign.totalMilestones;
 
         // Jika milestone terakhir, release semua sisa dana (termasuk selisih donasi berlebih)
         if (isLastMilestone) {
@@ -608,7 +696,11 @@ contract TrustFundEscrow is
         }
 
         if (lockedFunds[campaignId] < amount) {
-            revert InsufficientLockedFunds(campaignId, lockedFunds[campaignId], amount);
+            revert InsufficientLockedFunds(
+                campaignId,
+                lockedFunds[campaignId],
+                amount
+            );
         }
 
         uint8 releasedMilestone;
@@ -619,8 +711,7 @@ contract TrustFundEscrow is
         }
 
         // Transfer XIDR ke backend wallet
-        bool success = xidr.transfer(backendWallet, amount);
-        if (!success) revert TransferFailed();
+        xidr.safeTransfer(backendWallet, amount);
 
         emit MilestoneReleased(
             campaignId,
@@ -649,7 +740,9 @@ contract TrustFundEscrow is
      *
      * @param campaignId  ID kampanye yang akan di-refund
      */
-    function triggerRefund(bytes32 campaignId)
+    function triggerRefund(
+        bytes32 campaignId
+    )
         external
         onlyRole(BACKEND_ROLE)
         whenNotPaused
@@ -669,8 +762,7 @@ contract TrustFundEscrow is
         lockedFunds[campaignId] = 0;
 
         // Transfer semua sisa XIDR ke backend wallet
-        bool success = xidr.transfer(backendWallet, refundAmount);
-        if (!success) revert TransferFailed();
+        xidr.safeTransfer(backendWallet, refundAmount);
 
         _changeState(campaigns[campaignId], CampaignState.COMPLETED);
 
@@ -705,10 +797,9 @@ contract TrustFundEscrow is
      *
      * @param newWallet  Alamat wallet backend baru
      */
-    function updateBackendWallet(address newWallet)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function updateBackendWallet(
+        address newWallet
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newWallet == address(0)) revert ZeroAddress();
 
         address oldWallet = backendWallet;
@@ -722,6 +813,19 @@ contract TrustFundEscrow is
         emit BackendWalletUpdated(oldWallet, newWallet);
     }
 
+    function emergencyWithdraw(
+        address token,
+        uint256 amount
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (token == address(xidr)) {
+            revert InvalidAmount(amount, "cannot withdraw campaign funds");
+        }
+
+        IERC20(token).safeTransfer(msg.sender, amount);
+
+        emit EmergencyWithdraw(token, amount);
+    }
+
     // =========================================================
     // SECTION 11 — VIEW FUNCTIONS
     // =========================================================
@@ -731,12 +835,9 @@ contract TrustFundEscrow is
      * @param campaignId  ID kampanye
      * @return            Struct Campaign lengkap
      */
-    function getCampaign(bytes32 campaignId)
-        external
-        view
-        campaignExists(campaignId)
-        returns (Campaign memory)
-    {
+    function getCampaign(
+        bytes32 campaignId
+    ) external view campaignExists(campaignId) returns (Campaign memory) {
         return campaigns[campaignId];
     }
 
@@ -745,12 +846,9 @@ contract TrustFundEscrow is
      * @param campaignId  ID kampanye
      * @return            State kampanye
      */
-    function getCampaignState(bytes32 campaignId)
-        external
-        view
-        campaignExists(campaignId)
-        returns (CampaignState)
-    {
+    function getCampaignState(
+        bytes32 campaignId
+    ) external view campaignExists(campaignId) returns (CampaignState) {
         return campaigns[campaignId].state;
     }
 
@@ -759,12 +857,17 @@ contract TrustFundEscrow is
      * @param campaignId  ID kampanye
      * @return            Jumlah XIDR terkunci (satuan terkecil)
      */
-    function getLockedFunds(bytes32 campaignId)
-        external
-        view
-        returns (uint256)
-    {
+    function getLockedFunds(
+        bytes32 campaignId
+    ) external view returns (uint256) {
         return lockedFunds[campaignId];
+    }
+
+    function isFullyFunded(
+        bytes32 campaignId
+    ) external view campaignExists(campaignId) returns (bool) {
+        Campaign storage campaign = campaigns[campaignId];
+        return campaign.totalCollected >= campaign.targetAmount;
     }
 
     // =========================================================
@@ -779,7 +882,10 @@ contract TrustFundEscrow is
      * @param campaign  Storage reference ke Campaign struct
      * @param newState  State baru yang akan diset
      */
-    function _changeState(Campaign storage campaign, CampaignState newState) internal {
+    function _changeState(
+        Campaign storage campaign,
+        CampaignState newState
+    ) internal {
         CampaignState oldState = campaign.state;
         campaign.state = newState;
         emit CampaignStateChanged(campaign.campaignId, oldState, newState);
@@ -793,11 +899,9 @@ contract TrustFundEscrow is
      *
      * @param newImplementation  Alamat implementasi baru
      */
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        override
-        onlyRole(UPGRADER_ROLE)
-    {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyRole(UPGRADER_ROLE) {}
 
     // =========================================================
     // SECTION 13 — STORAGE GAP (wajib untuk UUPS upgradeable)
