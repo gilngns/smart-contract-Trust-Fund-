@@ -1,0 +1,8 @@
+{
+  "network": "amoy",
+  "upgradedAt": "2026-04-27T15:05:02.252Z",
+  "upgrader": "0x37B40932763F026BF784cd3a8d1A180d0308238E",
+  "proxyAddress": "0x2553566bd945f8Ffb0C7780bD9f3791Bc6d25A90",
+  "oldImplementation": "0x3F37653C2014C8620a05628c2Ca641aaA1E722e2",
+  "newImplementation": "0xE33AF795D965CfE994377d7Bb16a3084a2E7C6ED"
+}

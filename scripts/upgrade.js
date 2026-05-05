@@ -1,20 +1,3 @@
-/**
- * scripts/upgrade.js
- *
- * Script untuk upgrade implementasi TrustFundEscrow ke versi baru
- * tanpa kehilangan data (state tetap aman di proxy storage).
- *
- * Cara pakai:
- *   PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade.js --network amoy
- *   PROXY_ADDRESS=0x... npx hardhat run scripts/upgrade.js --network polygon
- *
- * PENTING sebelum upgrade mainnet:
- *   1. Test menyeluruh di testnet terlebih dahulu
- *   2. Jalankan: npx hardhat run scripts/upgrade.js --network amoy
- *   3. Verifikasi semua fungsi berjalan normal di testnet
- *   4. Baru eksekusi di mainnet dengan UPGRADER_ROLE dari multisig
- */
-
 const { ethers, upgrades, network } = require("hardhat");
 
 async function main() {
@@ -32,19 +15,16 @@ async function main() {
   console.log(`  Upgrader : ${upgrader.address}`);
   console.log(`  Proxy    : ${proxyAddress}`);
 
-  // ── Ambil implementasi lama sebelum upgrade ────────────────────────────────
   const oldImpl = await upgrades.erc1967.getImplementationAddress(proxyAddress);
   console.log(`\n  Old Implementation: ${oldImpl}`);
 
-  // ── Validasi upgrade compatibility (cek storage collision) ────────────────
   console.log("\n  Memvalidasi storage layout compatibility...");
-  const TrustFundEscrowV2 = await ethers.getContractFactory("TrustFundEscrow"); // Ganti dengan V2
+  const TrustFundEscrowV2 = await ethers.getContractFactory("TrustFundEscrow"); 
   await upgrades.validateUpgrade(proxyAddress, TrustFundEscrowV2, {
     kind: "uups",
   });
   console.log("  ✅ Storage layout valid, tidak ada collision.");
 
-  // ── Eksekusi upgrade ───────────────────────────────────────────────────────
   console.log("\n  Mengupgrade contract...");
   const upgraded = await upgrades.upgradeProxy(
     proxyAddress,
@@ -65,7 +45,6 @@ async function main() {
   console.log(`  Old Implementation: ${oldImpl}`);
   console.log(`  New Implementation: ${newImpl}`);
 
-  // ── Simpan catatan upgrade ─────────────────────────────────────────────────
   const fs = require("fs");
   const upgradeInfo = {
     network: network.name,

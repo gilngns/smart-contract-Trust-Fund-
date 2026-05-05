@@ -1,0 +1,11 @@
+{
+  "network": "amoy",
+  "chainId": 80002,
+  "deployedAt": "2026-04-27T14:10:27.320Z",
+  "deployer": "0x37B40932763F026BF784cd3a8d1A180d0308238E",
+  "proxyAddress": "0x2553566bd945f8Ffb0C7780bD9f3791Bc6d25A90",
+  "implementationAddress": "0x3F37653C2014C8620a05628c2Ca641aaA1E722e2",
+  "xidrToken": "0x3C1a391628A6805E8158C6ed747b640812E97eb6",
+  "backendWallet": "0x37B40932763F026BF784cd3a8d1A180d0308238E",
+  "adminMultisig": "0x37B40932763F026BF784cd3a8d1A180d0308238E"
+}
