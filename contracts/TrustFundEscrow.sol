@@ -47,6 +47,11 @@ contract TrustFundEscrow is
         uint8 currentMilestone;
         CampaignState state;
         bool advanceReleased;
+        address beneficiary;
+    }
+
+    struct EvidenceMetadata {
+        bytes32 metadataHash;
     }
 
     IERC20 public xidr;
@@ -56,6 +61,8 @@ contract TrustFundEscrow is
     address public backendWallet;
 
     address public oracleSigner;
+
+    mapping(bytes32 => mapping(uint8 => bytes32)) public evidenceMetadataHash;
 
     mapping(bytes32 => Campaign) private campaigns;
 
@@ -92,7 +99,12 @@ contract TrustFundEscrow is
 
     event RefundEnabled(bytes32 campaignId);
 
-    event EvidenceSubmitted(bytes32 campaignId, uint8 milestone, string cid);
+    event EvidenceSubmitted(
+        bytes32 campaignId,
+        uint8 milestone,
+        string cid,
+        bytes32 metadataHash
+    );
 
     event EmergencyWithdraw(address token, uint256 amount);
 
@@ -232,11 +244,15 @@ contract TrustFundEscrow is
         uint128 advanceAmount,
         uint128 milestoneAmount,
         uint8 totalMilestones,
-        string memory _rabCID
+        string memory _rabCID,
+        address beneficiary
     ) external onlyRole(BACKEND_ROLE) whenNotPaused {
         if (bytes(_rabCID).length == 0) {
-            revert InvalidAmount(0, "RAB CID required");
+            revert InvalidAmount(0, "CID required");
         }
+
+        if (beneficiary == address(0)) revert ZeroAddress();
+
         if (campaigns[campaignId].createdAt != 0) {
             revert CampaignAlreadyExists(campaignId);
         }
@@ -255,6 +271,8 @@ contract TrustFundEscrow is
 
         rabCID[campaignId] = _rabCID;
 
+        if (beneficiary == address(0)) revert ZeroAddress();
+
         campaigns[campaignId] = Campaign({
             campaignId: campaignId,
             targetAmount: targetAmount,
@@ -265,7 +283,8 @@ contract TrustFundEscrow is
             totalMilestones: totalMilestones,
             currentMilestone: 0,
             state: CampaignState.ACTIVE,
-            advanceReleased: false
+            advanceReleased: false,
+            beneficiary: beneficiary
         });
 
         totalCampaigns += 1;
@@ -416,9 +435,9 @@ contract TrustFundEscrow is
                 lockedFunds[campaignId] -= amount;
             }
 
-            xidr.safeTransfer(backendWallet, amount);
+            xidr.safeTransfer(campaign.beneficiary, amount);
 
-            emit AdvanceReleased(campaignId, amount, backendWallet);
+            emit AdvanceReleased(campaignId, amount, campaign.beneficiary);
         }
 
         campaign.advanceReleased = true;
@@ -427,9 +446,10 @@ contract TrustFundEscrow is
     }
 
     function claimRefund(
-        bytes32 campaignId,
-        address donor
-    ) external onlyRole(BACKEND_ROLE) nonReentrant campaignExists(campaignId) {
+        bytes32 campaignId
+    ) external nonReentrant campaignExists(campaignId) {
+        address donor = msg.sender;
+
         Campaign storage campaign = campaigns[campaignId];
 
         if (
@@ -459,7 +479,7 @@ contract TrustFundEscrow is
 
         lockedFunds[campaignId] -= userContribution;
 
-        xidr.safeTransfer(backendWallet, userContribution);
+        xidr.safeTransfer(donor, userContribution);
 
         emit RefundTriggered(campaignId, userContribution, donor);
 
@@ -471,11 +491,17 @@ contract TrustFundEscrow is
 
     function submitMilestone(
         bytes32 campaignId,
-        string memory evidenceCID
+        string memory evidenceCID,
+        bytes32 metadataHash
     ) external onlyRole(BACKEND_ROLE) whenNotPaused campaignExists(campaignId) {
+        if (metadataHash == bytes32(0)) {
+            revert InvalidAmount(0, "metadata hash required");
+        }
+
         if (bytes(evidenceCID).length == 0) {
             revert InvalidAmount(0, "evidence CID required");
         }
+
         Campaign storage campaign = campaigns[campaignId];
 
         if (campaign.state != CampaignState.ADVANCE_PAID) {
@@ -503,12 +529,17 @@ contract TrustFundEscrow is
 
         _changeState(campaign, CampaignState.MILESTONE_SUBMITTED);
 
+        evidenceMetadataHash[campaignId][
+            campaign.currentMilestone
+        ] = metadataHash;
+
         emit MilestoneSubmitted(campaignId, campaign.currentMilestone);
 
         emit EvidenceSubmitted(
             campaignId,
             campaign.currentMilestone,
-            evidenceCID
+            evidenceCID,
+            metadataHash
         );
     }
 
@@ -586,13 +617,13 @@ contract TrustFundEscrow is
             campaign.currentMilestone += 1;
         }
 
-        xidr.safeTransfer(backendWallet, amount);
+        xidr.safeTransfer(campaign.beneficiary, amount);
 
         emit MilestoneReleased(
             campaignId,
             releasedMilestone,
             amount,
-            backendWallet,
+            campaign.beneficiary,
             isLastMilestone
         );
 

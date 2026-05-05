@@ -33,7 +33,15 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
   async function create() {
     await escrow
       .connect(backend)
-      .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "CID");
+      .createCampaign(
+        campaignId,
+        toX(1000),
+        toX(100),
+        toX(100),
+        5,
+        "CID",
+        user1.address
+      );
   }
 
   async function funded() {
@@ -88,7 +96,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await expect(
       escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(100), toX(100), toX(100), 2, "CID")
+        .createCampaign(campaignId, toX(100), toX(100), toX(100), 2, "CID", user1.address)
     ).to.be.reverted;
   });
 
@@ -96,7 +104,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await expect(
       escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(1000), 0, toX(10), 21, "CID")
+        .createCampaign(campaignId, toX(1000), 0, toX(10), 21, "CID", user1.address)
     ).to.be.reverted;
   });
 
@@ -104,7 +112,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await expect(
       escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "")
+        .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "", user1.address)
     ).to.be.reverted;
   });
 
@@ -207,7 +215,13 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await escrow.connect(backend).releaseAdvance(campaignId);
 
     for (let i = 0; i < 5; i++) {
-      await escrow.connect(backend).submitMilestone(campaignId, "CID");
+      await escrow
+        .connect(backend)
+        .submitMilestone(
+          campaignId,
+          "CID",
+          ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+        );
 
       const sig = await sign(90, i + 1);
       await escrow.oracleCallback(campaignId, 90, i + 1, sig);
@@ -235,7 +249,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     const sig = await sign(40, 0);
     await escrow.oracleCallback(campaignId, 40, 0, sig);
 
-    await escrow.connect(backend).claimRefund(campaignId, user1.address);
+    await escrow.connect(user1).claimRefund(campaignId);
 
     expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(500));
   });
@@ -356,16 +370,15 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     });
 
     it("should not allow double refund", async () => {
-      await funded(); 
+      await funded();
 
       const sig = await sign(40, 0);
       await escrow.oracleCallback(campaignId, 40, 0, sig);
 
-      await escrow.connect(backend).claimRefund(campaignId, user1.address);
+      await escrow.connect(user1).claimRefund(campaignId);
 
-      await expect(
-        escrow.connect(backend).claimRefund(campaignId, user1.address)
-      ).to.be.reverted;
+      await expect(escrow.connect(user1).claimRefund(campaignId)).to.be
+        .reverted;
     });
 
     it("should revert deposit after funded", async () => {
@@ -379,15 +392,28 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     it("should revert submitMilestone before advance", async () => {
       await validated();
 
-      await expect(escrow.connect(backend).submitMilestone(campaignId, "CID"))
-        .to.be.reverted;
+      await expect(
+        escrow
+          .connect(backend)
+          .submitMilestone(
+            campaignId,
+            "CID",
+            ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+          )
+      ).to.be.reverted;
     });
 
     it("should revert releaseMilestone without oracle validation", async () => {
       await validated();
       await escrow.connect(backend).releaseAdvance(campaignId);
 
-      await escrow.connect(backend).submitMilestone(campaignId, "CID");
+      await escrow
+        .connect(backend)
+        .submitMilestone(
+          campaignId,
+          "CID",
+          ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+        );
 
       await expect(escrow.connect(backend).releaseMilestone(campaignId)).to.be
         .reverted;
@@ -400,7 +426,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       await expect(
         escrow
           .connect(user1)
-          .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "CID")
+          .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "CID", user1.address)
       ).to.be.reverted;
     });
 
@@ -412,14 +438,14 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       ).to.be.reverted;
     });
 
-    it("non-backend cannot claim refund", async () => {
+    it("user can claim their own refund", async () => {
       await funded();
 
       const sig = await sign(40, 0);
       await escrow.oracleCallback(campaignId, 40, 0, sig);
 
-      await expect(escrow.connect(user1).claimRefund(campaignId, user1.address))
-        .to.be.reverted;
+      await expect(escrow.connect(user1).claimRefund(campaignId)).to.not.be
+        .reverted;
     });
 
     // =========================
@@ -428,7 +454,15 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     it("should handle last milestone payout correctly (no revert)", async () => {
       await escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(1000), toX(0), toX(200), 5, "CID");
+        .createCampaign(
+          campaignId,
+          toX(1000),
+          toX(0),
+          toX(200),
+          5,
+          "CID",
+          user1.address
+        );
 
       await escrow
         .connect(backend)
@@ -439,9 +473,14 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
 
       await escrow.connect(backend).releaseAdvance(campaignId);
 
-      // jalankan semua milestone
       for (let i = 1; i <= 5; i++) {
-        await escrow.connect(backend).submitMilestone(campaignId, "CID");
+        await escrow
+          .connect(backend)
+          .submitMilestone(
+            campaignId,
+            "CID",
+            ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+          );
 
         const sigM = await sign(90, i);
         await escrow.oracleCallback(campaignId, 90, i, sigM);
@@ -449,7 +488,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
         await escrow.connect(backend).releaseMilestone(campaignId);
       }
 
-      // harus habis
       expect(await escrow.getLockedFunds(campaignId)).to.equal(0);
     });
 
@@ -543,14 +581,20 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
 
       await escrow.connect(backend).releaseAdvance(campaignId);
 
-      await escrow.connect(backend).submitMilestone(campaignId, "CID");
+      await escrow
+        .connect(backend)
+        .submitMilestone(
+          campaignId,
+          "CID",
+          ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+        );
 
       const sig1 = await sign(90, 1);
       await escrow.oracleCallback(campaignId, 90, 1, sig1);
 
       await attackerContract.set(campaignId);
 
-      await expect(attackerContract.attack()).to.be.reverted; // HARUS KE-REJECT
+      await expect(attackerContract.attack()).to.be.reverted;
     });
   });
 });

@@ -1,74 +1,65 @@
 const { ethers, upgrades, network } = require("hardhat");
+const fs = require("fs");
 
 async function main() {
   console.log("═".repeat(60));
-  console.log("  TrustFund Escrow — Upgrade Script");
+  console.log("Upgrade TrustFundEscrow");
   console.log("═".repeat(60));
-  console.log(`  Network  : ${network.name}`);
 
   const proxyAddress = process.env.PROXY_ADDRESS;
   if (!proxyAddress) {
-    throw new Error("❌ Set PROXY_ADDRESS di environment variable!");
+    throw new Error("❌ PROXY_ADDRESS belum diset");
   }
 
   const [upgrader] = await ethers.getSigners();
-  console.log(`  Upgrader : ${upgrader.address}`);
-  console.log(`  Proxy    : ${proxyAddress}`);
+
+  console.log("Network :", network.name);
+  console.log("Upgrader:", upgrader.address);
+  console.log("Proxy   :", proxyAddress);
 
   const oldImpl = await upgrades.erc1967.getImplementationAddress(proxyAddress);
-  console.log(`\n  Old Implementation: ${oldImpl}`);
+  console.log("Old Impl:", oldImpl);
 
-  console.log("\n  Memvalidasi storage layout compatibility...");
-  const TrustFundEscrowV2 = await ethers.getContractFactory("TrustFundEscrow"); 
-  await upgrades.validateUpgrade(proxyAddress, TrustFundEscrowV2, {
+  const Escrow = await ethers.getContractFactory("TrustFundEscrow");
+
+  console.log("\nValidating upgrade...");
+  await upgrades.validateUpgrade(proxyAddress, Escrow, {
     kind: "uups",
   });
-  console.log("  ✅ Storage layout valid, tidak ada collision.");
 
-  console.log("\n  Mengupgrade contract...");
-  const upgraded = await upgrades.upgradeProxy(
-    proxyAddress,
-    TrustFundEscrowV2,
-    {
-      kind: "uups",
-      timeout: 120_000,
-    }
-  );
+  console.log("Upgrading...");
+
+  const upgraded = await upgrades.upgradeProxy(proxyAddress, Escrow, {
+    kind: "uups",
+  });
 
   await upgraded.waitForDeployment();
+  await upgraded.deploymentTransaction().wait();
 
   const newImpl = await upgrades.erc1967.getImplementationAddress(proxyAddress);
 
-  console.log("\n  ✅ Upgrade Berhasil!");
-  console.log("  ─".repeat(30));
-  console.log(`  Proxy Address     : ${proxyAddress}`);
-  console.log(`  Old Implementation: ${oldImpl}`);
-  console.log(`  New Implementation: ${newImpl}`);
+  console.log("\n✅ UPGRADE SUCCESS");
+  console.log("Proxy :", proxyAddress);
+  console.log("Old   :", oldImpl);
+  console.log("New   :", newImpl);
 
-  const fs = require("fs");
-  const upgradeInfo = {
+  const data = {
     network: network.name,
-    upgradedAt: new Date().toISOString(),
-    upgrader: upgrader.address,
-    proxyAddress,
+    proxy: proxyAddress,
     oldImplementation: oldImpl,
     newImplementation: newImpl,
+    upgradedAt: new Date().toISOString(),
   };
 
-  const outDir = "./deployments";
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
+  if (!fs.existsSync("./deployments")) fs.mkdirSync("./deployments");
 
-  const outFile = `${outDir}/upgrade-${network.name}-${Date.now()}.json`;
-  fs.writeFileSync(outFile, JSON.stringify(upgradeInfo, null, 2));
-  console.log(`\n  📄 Upgrade info disimpan: ${outFile}`);
+  const file = `./deployments/upgrade-${Date.now()}.json`;
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
 
-  console.log("\n═".repeat(60));
+  console.log("\nSaved:", file);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("\n❌ Upgrade gagal:");
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

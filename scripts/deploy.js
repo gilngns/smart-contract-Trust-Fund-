@@ -1,132 +1,111 @@
 const { ethers, upgrades, network } = require("hardhat");
+const fs = require("fs");
 
 const XIDR_MAINNET = "0x3dc9a42fa7afe57be03c58fd7f4411b1e466c508";
 
 async function main() {
   console.log("═".repeat(60));
-  console.log("  TrustFund Escrow — Deployment Script");
+  console.log("TrustFund Escrow — Deployment");
   console.log("═".repeat(60));
-  console.log(`  Network  : ${network.name}`);
-  console.log(`  Chain ID : ${network.config.chainId}`);
 
   const [deployer] = await ethers.getSigners();
-  const deployerBalance = await ethers.provider.getBalance(deployer.address);
+  const balance = await ethers.provider.getBalance(deployer.address);
 
-  console.log(`\n  Deployer : ${deployer.address}`);
-  console.log(`  Balance  : ${ethers.formatEther(deployerBalance)} MATIC`);
+  console.log(`Network   : ${network.name}`);
+  console.log(`Deployer  : ${deployer.address}`);
+  console.log(`Balance   : ${ethers.formatEther(balance)} ETH`);
 
-  if (deployerBalance === 0n) {
-    throw new Error("❌ Deployer wallet tidak memiliki MATIC untuk gas!");
+  if (balance === 0n) {
+    throw new Error("❌ Wallet tidak ada balance untuk gas");
   }
 
-  const isLocalOrTest = ["hardhat", "localhost"].includes(network.name);
+  const isLocal = ["hardhat", "localhost"].includes(network.name);
 
   let xidrAddress;
 
-  if (isLocalOrTest) {
-    console.log("\n  Deploying MockXIDR for local testing...");
-
-    const MockXIDR = await ethers.getContractFactory("MockXIDR");
-    const mock = await MockXIDR.deploy(deployer.address);
+  if (isLocal) {
+    console.log("\nDeploying MockXIDR...");
+    const Mock = await ethers.getContractFactory("MockXIDR");
+    const mock = await Mock.deploy(deployer.address);
     await mock.waitForDeployment();
 
     xidrAddress = await mock.getAddress();
-    console.log(`  Mock XIDR deployed: ${xidrAddress}`);
+    console.log("MockXIDR:", xidrAddress);
   } else {
     xidrAddress = process.env.XIDR_TOKEN_ADDRESS || XIDR_MAINNET;
   }
 
   const backendWallet = process.env.BACKEND_WALLET;
-  const adminMultisig = process.env.ADMIN_MULTISIG;
+  const admin = process.env.ADMIN_MULTISIG;
 
-  if (!xidrAddress)
-    throw new Error("❌ XIDR_TOKEN_ADDRESS tidak diset di .env");
-  if (!backendWallet) throw new Error("❌ BACKEND_WALLET tidak diset di .env");
-  if (!adminMultisig) throw new Error("❌ ADMIN_MULTISIG tidak diset di .env");
+  if (!backendWallet) throw new Error("❌ BACKEND_WALLET belum diset");
+  if (!admin) throw new Error("❌ ADMIN_MULTISIG belum diset");
 
-  console.log("\n  Config:");
-  console.log(`  ├─ XIDR Token    : ${xidrAddress}`);
-  console.log(`  ├─ Backend Wallet: ${backendWallet}`);
-  console.log(`  └─ Admin Multisig: ${adminMultisig}`);
+  console.log("\nConfig:");
+  console.log("XIDR       :", xidrAddress);
+  console.log("Backend    :", backendWallet);
+  console.log("Admin      :", admin);
 
-  console.log("\n  Deploying TrustFundEscrow proxy...");
+  console.log("\nDeploying proxy...");
 
-  const TrustFundEscrow = await ethers.getContractFactory("TrustFundEscrow");
+  const Escrow = await ethers.getContractFactory("TrustFundEscrow");
 
   const proxy = await upgrades.deployProxy(
-    TrustFundEscrow,
-    [xidrAddress, backendWallet, adminMultisig],
+    Escrow,
+    [xidrAddress, backendWallet, admin],
     {
-      kind: "uups",
       initializer: "initialize",
-      timeout: 120_000,
-      pollingInterval: 5_000,
+      kind: "uups",
     }
   );
 
   await proxy.waitForDeployment();
+  await proxy.deploymentTransaction().wait();
 
   const proxyAddress = await proxy.getAddress();
-  const implAddress = await upgrades.erc1967.getImplementationAddress(
-    proxyAddress
-  );
-  const adminAddress = await upgrades.erc1967.getAdminAddress(proxyAddress);
+  const impl = await upgrades.erc1967.getImplementationAddress(proxyAddress);
 
-  console.log("\n  ✅ Deployment Berhasil!");
-  console.log("  ─".repeat(30));
-  console.log(`  Proxy Address      : ${proxyAddress}`);
-  console.log(`  Implementation     : ${implAddress}`);
-  console.log(`  ERC1967 Admin      : ${adminAddress}`);
+  console.log("\n✅ DEPLOY SUCCESS");
+  console.log("Proxy :", proxyAddress);
+  console.log("Impl  :", impl);
 
-  const fs = require("fs");
-  const deploymentInfo = {
+  const data = {
     network: network.name,
-    chainId: network.config.chainId,
-    deployedAt: new Date().toISOString(),
-    deployer: deployer.address,
-    proxyAddress,
-    implementationAddress: implAddress,
-    xidrToken: xidrAddress,
+    proxy: proxyAddress,
+    implementation: impl,
+    xidr: xidrAddress,
     backendWallet,
-    adminMultisig,
+    admin,
+    deployedAt: new Date().toISOString(),
   };
 
-  const outDir = "./deployments";
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
+  if (!fs.existsSync("./deployments")) fs.mkdirSync("./deployments");
 
-  const outFile = `${outDir}/${network.name}-${Date.now()}.json`;
-  fs.writeFileSync(outFile, JSON.stringify(deploymentInfo, null, 2));
-  console.log(`\n  📄 Deployment info disimpan: ${outFile}`);
+  const file = `./deployments/${network.name}-${Date.now()}.json`;
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
 
-  if (!isLocalOrTest && process.env.POLYGONSCAN_API_KEY) {
-    console.log("\n  Menunggu 5 konfirmasi sebelum verifikasi...");
-    await new Promise((resolve) => setTimeout(resolve, 30_000));
+  console.log("\nSaved:", file);
+
+  // VERIFY
+  if (!isLocal && process.env.POLYGONSCAN_API_KEY) {
+    console.log("\nVerifying... wait 30s");
+    await new Promise((r) => setTimeout(r, 30000));
 
     try {
-      const { run } = require("hardhat");
-      await run("verify:verify", {
-        address: implAddress,
+      await hre.run("verify:verify", {
+        address: impl,
         constructorArguments: [],
       });
-      console.log("  ✅ Contract terverifikasi di Polygonscan!");
+      console.log("✅ Verified");
     } catch (e) {
-      if (e.message.includes("Already Verified")) {
-        console.log("  ℹ️  Contract sudah terverifikasi sebelumnya.");
-      } else {
-        console.warn(`  ⚠️  Verifikasi gagal: ${e.message}`);
-      }
+      console.log("⚠️ Verify failed:", e.message);
     }
   }
 
-  console.log("\n═".repeat(60));
-  console.log("  Deployment selesai.");
-  console.log("═".repeat(60));
+  console.log("\nDONE 🚀");
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("\n❌ Deployment gagal:");
-    console.error(error);
-    process.exit(1);
-  });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

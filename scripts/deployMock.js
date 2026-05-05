@@ -1,16 +1,20 @@
-const { ethers } = require("hardhat");
+const { ethers, network } = require("hardhat");
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  console.log("Deploy MockXIDR");
+  console.log("Network:", network.name);
 
-  console.log("Deploying MockXIDR...");
+  const [deployer] = await ethers.getSigners();
 
   const Mock = await ethers.getContractFactory("MockXIDR");
   const mock = await Mock.deploy(deployer.address);
 
   await mock.waitForDeployment();
 
-  console.log("✅ MockXIDR:", await mock.getAddress());
+  console.log("✅ MockXIDR deployed:", await mock.getAddress());
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
