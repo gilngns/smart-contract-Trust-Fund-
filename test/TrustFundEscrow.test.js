@@ -27,9 +27,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await token.connect(backend).approve(escrow.target, toX(100000));
   });
 
-  // =========================
-  // HELPER
-  // =========================
   async function create() {
     await escrow
       .connect(backend)
@@ -65,9 +62,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     return await owner.signMessage(ethers.getBytes(msg));
   }
 
-  // =========================
-  // BASIC
-  // =========================
   it("initialize", async () => {
     expect(await escrow.backendWallet()).to.equal(backend.address);
   });
@@ -83,9 +77,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     ).to.be.reverted;
   });
 
-  // =========================
-  // CREATE CAMPAIGN
-  // =========================
   it("create success", async () => {
     await create();
     const c = await escrow.getCampaign(campaignId);
@@ -116,9 +107,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     ).to.be.reverted;
   });
 
-  // =========================
-  // DEPOSIT
-  // =========================
   it("deposit success", async () => {
     await create();
     await escrow
@@ -148,9 +136,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     ).to.be.reverted;
   });
 
-  // =========================
-  // ORACLE
-  // =========================
   it("oracle valid", async () => {
     await funded();
     const sig = await sign(90, 0);
@@ -192,9 +177,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await expect(escrow.oracleCallback(campaignId, 120, 0, sig)).to.be.reverted;
   });
 
-  // =========================
-  // ADVANCE
-  // =========================
   it("release advance", async () => {
     await validated();
     await escrow.connect(backend).releaseAdvance(campaignId);
@@ -207,9 +189,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       .reverted;
   });
 
-  // =========================
-  // MILESTONE FULL LOOP
-  // =========================
   it("complete all milestones", async () => {
     await validated();
     await escrow.connect(backend).releaseAdvance(campaignId);
@@ -233,9 +212,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     expect(await escrow.getLockedFunds(campaignId)).to.equal(0);
   });
 
-  // =========================
-  // REFUND
-  // =========================
   it("refund per donor", async () => {
     await create();
 
@@ -254,11 +230,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(500));
   });
 
-  // Regression: advance already released, then campaign frozen for refund.
-  // Previously claimRefund reverted InsufficientLockedFunds because each
-  // donor's full contribution no longer fit in the shrunken pool.
   it("proportional refund after advance released", async () => {
-    // Two donors, 500 each -> targetAmount 1000 reached, FUNDED.
     await create();
     await escrow
       .connect(backend)
@@ -267,15 +239,12 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       .connect(backend)
       .depositXIDR(campaignId, toX(500), user2.address);
 
-    // Milestone 0 validated (score >= 85) -> VALIDATED, then advance paid.
     const sigOk = await sign(90, 0);
     await escrow.oracleCallback(campaignId, 90, 0, sigOk);
-    await escrow.connect(backend).releaseAdvance(campaignId); // pays advance 100
+    await escrow.connect(backend).releaseAdvance(campaignId);
 
-    // Pool now holds 1000 - 100 = 900.
     expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(900));
 
-    // Next milestone fails hard (score < 50) -> FROZEN + refundEnabled.
     await escrow
       .connect(backend)
       .submitMilestone(
@@ -289,24 +258,19 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     const before1 = await token.balanceOf(user1.address);
     const before2 = await token.balanceOf(user2.address);
 
-    // user1 refunds: 500 * 900 / 1000 = 450 (proportional, no revert).
     await escrow.connect(user1).claimRefund(campaignId);
     expect(await token.balanceOf(user1.address)).to.equal(before1 + toX(450));
     expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(450));
 
-    // user2 is now the last claimant: sweeps the remaining 450, pool -> 0.
     await escrow.connect(user2).claimRefund(campaignId);
     expect(await token.balanceOf(user2.address)).to.equal(before2 + toX(450));
     expect(await escrow.getLockedFunds(campaignId)).to.equal(0);
 
-    // Pool empty -> campaign COMPLETED.
     expect(await escrow.getCampaignState(campaignId)).to.equal(6);
   });
 
-  // No dust stranded when contributions divide unevenly against the pool.
   it("proportional refund leaves no dust with uneven split", async () => {
     await create();
-    // user1: 700, user2: 300  -> total 1000, FUNDED.
     await escrow
       .connect(backend)
       .depositXIDR(campaignId, toX(700), user1.address);
@@ -316,7 +280,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
 
     const sigOk = await sign(90, 0);
     await escrow.oracleCallback(campaignId, 90, 0, sigOk);
-    await escrow.connect(backend).releaseAdvance(campaignId); // pays 100
+    await escrow.connect(backend).releaseAdvance(campaignId);
 
     await escrow
       .connect(backend)
@@ -328,7 +292,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     const sigFail = await sign(40, 1);
     await escrow.oracleCallback(campaignId, 40, 1, sigFail);
 
-    // Both donors claim in any order; pool must end exactly at 0.
     await escrow.connect(user2).claimRefund(campaignId);
     await escrow.connect(user1).claimRefund(campaignId);
 
@@ -336,9 +299,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     expect(await escrow.getCampaignState(campaignId)).to.equal(6);
   });
 
-  // =========================
-  // ADMIN
-  // =========================
   it("pause/unpause", async () => {
     await escrow.pause();
     await expect(create()).to.be.reverted;
@@ -361,9 +321,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     expect(await escrow.oracleSigner()).to.equal(user2.address);
   });
 
-  // =========================
-  // EMERGENCY
-  // =========================
   it("withdraw other token", async () => {
     const Token = await ethers.getContractFactory("MockXIDR");
     const other = await Token.deploy(owner.address);
@@ -377,9 +334,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       .reverted;
   });
 
-  // =========================
-  // UUPS
-  // =========================
   it("upgrade success", async () => {
     const EscrowV2 = await ethers.getContractFactory("TrustFundEscrow");
     await upgrades.upgradeProxy(escrow.target, EscrowV2);
@@ -395,14 +349,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     expect(c.targetAmount).to.equal(toX(1000));
   });
 
-  // =========================
-  // EXTRA AUDIT TEST (ADD THIS)
-  // =========================
-
   describe("EXTRA AUDIT COVERAGE", function () {
-    // =========================
-    // STATE MACHINE NEGATIVE
-    // =========================
 
     it("fuzz: random deposits should not break state", async () => {
       await create();
@@ -412,7 +359,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       for (let i = 0; i < 10; i++) {
         const rand = Math.floor(Math.random() * 200) + 1;
 
-        // stop kalau sudah mendekati target
         if (total + rand > 1000) break;
 
         const amount = toX(rand);
@@ -501,9 +447,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
         .reverted;
     });
 
-    // =========================
-    // ACCESS CONTROL
-    // =========================
     it("non-backend cannot create campaign", async () => {
       await expect(
         escrow
@@ -530,9 +473,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
         .reverted;
     });
 
-    // =========================
-    // LOCKED FUNDS EDGE
-    // =========================
     it("should handle last milestone payout correctly (no revert)", async () => {
       await escrow
         .connect(backend)
@@ -573,9 +513,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       expect(await escrow.getLockedFunds(campaignId)).to.equal(0);
     });
 
-    // =========================
-    // DONOR EDGE CASE
-    // =========================
     it("same donor multiple deposits accumulates correctly", async () => {
       await create();
 
@@ -591,9 +528,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       expect(locked).to.equal(toX(500));
     });
 
-    // =========================
-    // ORACLE EDGE CASE
-    // =========================
     it("old signature invalid after signer change", async () => {
       await funded();
 
@@ -614,9 +548,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
         .reverted;
     });
 
-    // =========================
-    // INVARIANT BASIC
-    // =========================
     it("lockedFunds <= totalCollected", async () => {
       await create();
 
@@ -653,7 +584,6 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     it("should block reentrancy attack", async () => {
       await create();
 
-      // attacker jadi donor
       await escrow
         .connect(backend)
         .depositXIDR(campaignId, toX(1000), attackerContract.target);
