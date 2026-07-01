@@ -469,19 +469,41 @@ contract TrustFundEscrow is
 
         contributions[campaignId][donor] = 0;
 
-        if (lockedFunds[campaignId] < userContribution) {
-            revert InsufficientLockedFunds(
-                campaignId,
-                lockedFunds[campaignId],
-                userContribution
-            );
+        // Proportional refund: if part of the campaign funds were already
+        // released (advance / milestones), the pool no longer holds every
+        // donor's full contribution. Each donor gets back their share of what
+        // is still locked, pro-rata to how much they put in.
+        //
+        //   refund = userContribution * lockedFunds / (unrefunded contributions)
+        //
+        // When nothing has been released, this equals userContribution (full
+        // refund) — backwards compatible with the original behaviour.
+        uint256 currentLocked = lockedFunds[campaignId];
+
+        // Basis = contributions not yet refunded (shrinks as donors claim).
+        uint256 unrefundedBasis = uint256(campaign.totalCollected) -
+            refundedContribution[campaignId];
+
+        uint256 refundAmount = (userContribution * currentLocked) /
+            unrefundedBasis;
+
+        // If this donor's contribution is all that remains in the basis, sweep
+        // the full locked balance so no rounding dust gets stranded.
+        if (userContribution >= unrefundedBasis || refundAmount > currentLocked) {
+            refundAmount = currentLocked;
         }
 
-        lockedFunds[campaignId] -= userContribution;
+        if (refundAmount == 0) {
+            // Their entire share was already spent on released milestones.
+            revert InvalidAmount(0, "nothing left to refund");
+        }
 
-        xidr.safeTransfer(donor, userContribution);
+        refundedContribution[campaignId] += userContribution;
+        lockedFunds[campaignId] -= refundAmount;
 
-        emit RefundTriggered(campaignId, userContribution, donor);
+        xidr.safeTransfer(donor, refundAmount);
+
+        emit RefundTriggered(campaignId, refundAmount, donor);
 
         if (lockedFunds[campaignId] == 0) {
             refundEnabled[campaignId] = false;
@@ -714,5 +736,11 @@ contract TrustFundEscrow is
 
     uint256 public totalCampaigns;
 
-    uint256[50] private __gap;
+    // Sum of donor contributions already refunded (per campaign). Used by
+    // claimRefund to detect the final claim so leftover rounding dust from
+    // proportional refunds is swept out and lockedFunds reaches exactly 0.
+    // Appended here (before __gap) to preserve the upgrade storage layout.
+    mapping(bytes32 => uint256) public refundedContribution;
+
+    uint256[49] private __gap;
 }

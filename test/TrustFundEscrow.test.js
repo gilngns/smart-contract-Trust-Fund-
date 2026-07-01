@@ -254,6 +254,88 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(500));
   });
 
+  // Regression: advance already released, then campaign frozen for refund.
+  // Previously claimRefund reverted InsufficientLockedFunds because each
+  // donor's full contribution no longer fit in the shrunken pool.
+  it("proportional refund after advance released", async () => {
+    // Two donors, 500 each -> targetAmount 1000 reached, FUNDED.
+    await create();
+    await escrow
+      .connect(backend)
+      .depositXIDR(campaignId, toX(500), user1.address);
+    await escrow
+      .connect(backend)
+      .depositXIDR(campaignId, toX(500), user2.address);
+
+    // Milestone 0 validated (score >= 85) -> VALIDATED, then advance paid.
+    const sigOk = await sign(90, 0);
+    await escrow.oracleCallback(campaignId, 90, 0, sigOk);
+    await escrow.connect(backend).releaseAdvance(campaignId); // pays advance 100
+
+    // Pool now holds 1000 - 100 = 900.
+    expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(900));
+
+    // Next milestone fails hard (score < 50) -> FROZEN + refundEnabled.
+    await escrow
+      .connect(backend)
+      .submitMilestone(
+        campaignId,
+        "CID",
+        ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+      );
+    const sigFail = await sign(40, 1);
+    await escrow.oracleCallback(campaignId, 40, 1, sigFail);
+
+    const before1 = await token.balanceOf(user1.address);
+    const before2 = await token.balanceOf(user2.address);
+
+    // user1 refunds: 500 * 900 / 1000 = 450 (proportional, no revert).
+    await escrow.connect(user1).claimRefund(campaignId);
+    expect(await token.balanceOf(user1.address)).to.equal(before1 + toX(450));
+    expect(await escrow.getLockedFunds(campaignId)).to.equal(toX(450));
+
+    // user2 is now the last claimant: sweeps the remaining 450, pool -> 0.
+    await escrow.connect(user2).claimRefund(campaignId);
+    expect(await token.balanceOf(user2.address)).to.equal(before2 + toX(450));
+    expect(await escrow.getLockedFunds(campaignId)).to.equal(0);
+
+    // Pool empty -> campaign COMPLETED.
+    expect(await escrow.getCampaignState(campaignId)).to.equal(6);
+  });
+
+  // No dust stranded when contributions divide unevenly against the pool.
+  it("proportional refund leaves no dust with uneven split", async () => {
+    await create();
+    // user1: 700, user2: 300  -> total 1000, FUNDED.
+    await escrow
+      .connect(backend)
+      .depositXIDR(campaignId, toX(700), user1.address);
+    await escrow
+      .connect(backend)
+      .depositXIDR(campaignId, toX(300), user2.address);
+
+    const sigOk = await sign(90, 0);
+    await escrow.oracleCallback(campaignId, 90, 0, sigOk);
+    await escrow.connect(backend).releaseAdvance(campaignId); // pays 100
+
+    await escrow
+      .connect(backend)
+      .submitMilestone(
+        campaignId,
+        "CID",
+        ethers.keccak256(ethers.toUtf8Bytes("metadata"))
+      );
+    const sigFail = await sign(40, 1);
+    await escrow.oracleCallback(campaignId, 40, 1, sigFail);
+
+    // Both donors claim in any order; pool must end exactly at 0.
+    await escrow.connect(user2).claimRefund(campaignId);
+    await escrow.connect(user1).claimRefund(campaignId);
+
+    expect(await escrow.getLockedFunds(campaignId)).to.equal(0);
+    expect(await escrow.getCampaignState(campaignId)).to.equal(6);
+  });
+
   // =========================
   // ADMIN
   // =========================
