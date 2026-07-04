@@ -40,7 +40,6 @@ contract TrustFundEscrow is
         bytes32 campaignId;
         uint128 targetAmount;
         uint128 totalCollected;
-        uint128 milestoneAmount;
         uint128 advanceAmount;
         uint32 createdAt;
         uint8 totalMilestones;
@@ -65,6 +64,8 @@ contract TrustFundEscrow is
     mapping(bytes32 => mapping(uint8 => bytes32)) public evidenceMetadataHash;
 
     mapping(bytes32 => Campaign) private campaigns;
+
+    mapping(bytes32 => mapping(uint8 => uint256)) public milestoneAmounts;
 
     mapping(bytes32 => uint256) public lockedFunds;
 
@@ -242,8 +243,7 @@ contract TrustFundEscrow is
         bytes32 campaignId,
         uint128 targetAmount,
         uint128 advanceAmount,
-        uint128 milestoneAmount,
-        uint8 totalMilestones,
+        uint128[] calldata _milestoneAmounts,
         string memory _rabCID,
         address beneficiary
     ) external onlyRole(BACKEND_ROLE) whenNotPaused {
@@ -259,25 +259,32 @@ contract TrustFundEscrow is
 
         if (targetAmount == 0)
             revert InvalidAmount(targetAmount, "target cannot be zero");
-        if (totalMilestones == 0 || totalMilestones > 20) {
-            revert InvalidMilestoneConfig("totalMilestones must be 1-20");
+
+        uint8 totalMilestones = uint8(_milestoneAmounts.length);
+        if (totalMilestones < 2 || totalMilestones > 6) {
+            revert InvalidMilestoneConfig("totalMilestones must be 2-6");
         }
 
-        uint256 totalPayout = uint256(advanceAmount) +
-            (uint256(milestoneAmount) * totalMilestones);
+        if (advanceAmount > (targetAmount * 15) / 100) {
+            revert InvalidMilestoneConfig("DP max 15%");
+        }
+
+        uint256 totalPayout = uint256(advanceAmount);
+        for (uint8 i = 0; i < totalMilestones; i++) {
+            totalPayout += uint256(_milestoneAmounts[i]);
+            milestoneAmounts[campaignId][i] = _milestoneAmounts[i];
+        }
+
         if (totalPayout > targetAmount) {
             revert InvalidMilestoneConfig("payout config exceeds targetAmount");
         }
 
         rabCID[campaignId] = _rabCID;
 
-        if (beneficiary == address(0)) revert ZeroAddress();
-
         campaigns[campaignId] = Campaign({
             campaignId: campaignId,
             targetAmount: targetAmount,
             totalCollected: 0,
-            milestoneAmount: milestoneAmount,
             advanceAmount: advanceAmount,
             createdAt: uint32(block.timestamp),
             totalMilestones: totalMilestones,
@@ -595,10 +602,10 @@ contract TrustFundEscrow is
             revert MilestoneAlreadyCompleted(campaignId);
         }
 
-        uint256 amount = campaign.milestoneAmount;
+        uint256 amount = milestoneAmounts[campaignId][campaign.currentMilestone];
 
         if (
-            campaign.milestoneAmount == 0 &&
+            amount == 0 &&
             campaign.currentMilestone + 1 < campaign.totalMilestones
         ) {
             revert InvalidAmount(0, "invalid milestone amount");

@@ -34,8 +34,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
         campaignId,
         toX(1000),
         toX(100),
-        toX(100),
-        5,
+        [toX(100), toX(100), toX(100), toX(100), toX(500)],
         "CID",
         user1.address
       );
@@ -87,15 +86,15 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await expect(
       escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(100), toX(100), toX(100), 2, "CID", user1.address)
+        .createCampaign(campaignId, toX(100), toX(100), [toX(100), toX(100)], "CID", user1.address)
     ).to.be.reverted;
   });
 
-  it("invalid milestone > 20", async () => {
+  it("invalid milestone > 6", async () => {
     await expect(
       escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(1000), 0, toX(10), 21, "CID", user1.address)
+        .createCampaign(campaignId, toX(1000), 0, [toX(10), toX(10), toX(10), toX(10), toX(10), toX(10), toX(10)], "CID", user1.address)
     ).to.be.reverted;
   });
 
@@ -103,7 +102,15 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
     await expect(
       escrow
         .connect(backend)
-        .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "", user1.address)
+        .createCampaign(campaignId, toX(1000), toX(100), [toX(100), toX(100), toX(100), toX(100), toX(500)], "", user1.address)
+    ).to.be.reverted;
+  });
+
+  it("invalid DP > 15%", async () => {
+    await expect(
+      escrow
+        .connect(backend)
+        .createCampaign(campaignId, toX(1000), toX(200), [toX(100), toX(700)], "CID", user1.address)
     ).to.be.reverted;
   });
 
@@ -451,7 +458,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
       await expect(
         escrow
           .connect(user1)
-          .createCampaign(campaignId, toX(1000), toX(100), toX(100), 5, "CID", user1.address)
+          .createCampaign(campaignId, toX(1000), toX(100), [toX(100), toX(100), toX(100), toX(100), toX(500)], "CID", user1.address)
       ).to.be.reverted;
     });
 
@@ -480,8 +487,7 @@ describe("TrustFundEscrow FULL AUDIT TEST", function () {
           campaignId,
           toX(1000),
           toX(0),
-          toX(200),
-          5,
+          [toX(200), toX(200), toX(200), toX(200), toX(200)],
           "CID",
           user1.address
         );

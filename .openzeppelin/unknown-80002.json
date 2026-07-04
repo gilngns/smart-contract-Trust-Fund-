@@ -15,6 +15,11 @@
       "address": "0x2553566bd945f8Ffb0C7780bD9f3791Bc6d25A90",
       "txHash": "0xb2a7548d7493c4a9b1460b445b2d8ec9f71e331d6b5c4b0a4a1d94653a1041cf",
       "kind": "uups"
+    },
+    {
+      "address": "0xD566636AB5A74276B0c120bD4593f9547D601bC9",
+      "txHash": "0x2f06b5d2d6a6d107a6db25867900b462746e02225cffb78f4029bf0814fd8fcd",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -844,6 +849,442 @@
                 "label": "advanceReleased",
                 "type": "t_bool",
                 "offset": 7,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint32": {
+            "label": "uint32",
+            "numberOfBytes": "4"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Pausable": [
+            {
+              "contract": "PausableUpgradeable",
+              "label": "_paused",
+              "type": "t_bool",
+              "src": "@openzeppelin\\contracts-upgradeable\\utils\\PausableUpgradeable.sol:21",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.AccessControl": [
+            {
+              "contract": "AccessControlUpgradeable",
+              "label": "_roles",
+              "type": "t_mapping(t_bytes32,t_struct(RoleData)24_storage)",
+              "src": "@openzeppelin\\contracts-upgradeable\\access\\AccessControlUpgradeable.sol:61",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin\\contracts\\proxy\\utils\\Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin\\contracts\\proxy\\utils\\Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "39fd719cdf93d6a302a73d9bdd083dc7a85aa3c64fd2fab8937524242b9aa172": {
+      "address": "0x42DB1be6C63FEC7936c5aB2a4723f16CAF3bF2F9",
+      "txHash": "0x89558173886f6d4d1b903000797822a2ecd10bdab380a3260b814389dedaa15f",
+      "layout": {
+        "solcVersion": "0.8.24",
+        "storage": [
+          {
+            "label": "xidr",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_contract(IERC20)1636",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:57"
+          },
+          {
+            "label": "backendWallet",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:61"
+          },
+          {
+            "label": "oracleSigner",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:63"
+          },
+          {
+            "label": "evidenceMetadataHash",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_mapping(t_bytes32,t_mapping(t_uint8,t_bytes32))",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:65"
+          },
+          {
+            "label": "campaigns",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_mapping(t_bytes32,t_struct(Campaign)9429_storage)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:67"
+          },
+          {
+            "label": "lockedFunds",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:69"
+          },
+          {
+            "label": "refundEnabled",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_mapping(t_bytes32,t_bool)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:71"
+          },
+          {
+            "label": "oracleNonces",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:73"
+          },
+          {
+            "label": "rabCID",
+            "offset": 0,
+            "slot": "8",
+            "type": "t_mapping(t_bytes32,t_string_storage)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:75"
+          },
+          {
+            "label": "milestoneEvidenceCID",
+            "offset": 0,
+            "slot": "9",
+            "type": "t_mapping(t_bytes32,t_mapping(t_uint8,t_string_storage))",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:77"
+          },
+          {
+            "label": "_reentrancyStatus",
+            "offset": 0,
+            "slot": "10",
+            "type": "t_uint256",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:79"
+          },
+          {
+            "label": "contributions",
+            "offset": 0,
+            "slot": "11",
+            "type": "t_mapping(t_bytes32,t_mapping(t_address,t_uint256))",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:720"
+          },
+          {
+            "label": "donors",
+            "offset": 0,
+            "slot": "12",
+            "type": "t_mapping(t_bytes32,t_array(t_address)dyn_storage)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:721"
+          },
+          {
+            "label": "isDonor",
+            "offset": 0,
+            "slot": "13",
+            "type": "t_mapping(t_bytes32,t_mapping(t_address,t_bool))",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:722"
+          },
+          {
+            "label": "totalCampaigns",
+            "offset": 0,
+            "slot": "14",
+            "type": "t_uint256",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:724"
+          },
+          {
+            "label": "refundedContribution",
+            "offset": 0,
+            "slot": "15",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:726"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "16",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "TrustFundEscrow",
+            "src": "contracts\\TrustFundEscrow.sol:728"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_struct(RoleData)24_storage)": {
+            "label": "mapping(bytes32 => struct AccessControlUpgradeable.RoleData)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(AccessControlStorage)34_storage": {
+            "label": "struct AccessControlUpgradeable.AccessControlStorage",
+            "members": [
+              {
+                "label": "_roles",
+                "type": "t_mapping(t_bytes32,t_struct(RoleData)24_storage)",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(InitializableStorage)515_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(PausableStorage)187_storage": {
+            "label": "struct PausableUpgradeable.PausableStorage",
+            "members": [
+              {
+                "label": "_paused",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(RoleData)24_storage": {
+            "label": "struct AccessControlUpgradeable.RoleData",
+            "members": [
+              {
+                "label": "hasRole",
+                "type": "t_mapping(t_address,t_bool)",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "adminRole",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_contract(IERC20)1636": {
+            "label": "contract IERC20",
+            "numberOfBytes": "20"
+          },
+          "t_enum(CampaignState)9405": {
+            "label": "enum TrustFundEscrow.CampaignState",
+            "members": [
+              "ACTIVE",
+              "FUNDED",
+              "ADVANCE_PAID",
+              "MILESTONE_SUBMITTED",
+              "VALIDATED",
+              "FROZEN",
+              "COMPLETED"
+            ],
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_array(t_address)dyn_storage)": {
+            "label": "mapping(bytes32 => address[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_bool)": {
+            "label": "mapping(bytes32 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_mapping(t_address,t_bool))": {
+            "label": "mapping(bytes32 => mapping(address => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(bytes32 => mapping(address => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_mapping(t_uint8,t_bytes32))": {
+            "label": "mapping(bytes32 => mapping(uint8 => bytes32))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_mapping(t_uint8,t_string_storage))": {
+            "label": "mapping(bytes32 => mapping(uint8 => string))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_string_storage)": {
+            "label": "mapping(bytes32 => string)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_struct(Campaign)9429_storage)": {
+            "label": "mapping(bytes32 => struct TrustFundEscrow.Campaign)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_uint256)": {
+            "label": "mapping(bytes32 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint8,t_bytes32)": {
+            "label": "mapping(uint8 => bytes32)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint8,t_string_storage)": {
+            "label": "mapping(uint8 => string)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Campaign)9429_storage": {
+            "label": "struct TrustFundEscrow.Campaign",
+            "members": [
+              {
+                "label": "campaignId",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "targetAmount",
+                "type": "t_uint128",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalCollected",
+                "type": "t_uint128",
+                "offset": 16,
+                "slot": "1"
+              },
+              {
+                "label": "milestoneAmount",
+                "type": "t_uint128",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "advanceAmount",
+                "type": "t_uint128",
+                "offset": 16,
+                "slot": "2"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint32",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "totalMilestones",
+                "type": "t_uint8",
+                "offset": 4,
+                "slot": "3"
+              },
+              {
+                "label": "currentMilestone",
+                "type": "t_uint8",
+                "offset": 5,
+                "slot": "3"
+              },
+              {
+                "label": "state",
+                "type": "t_enum(CampaignState)9405",
+                "offset": 6,
+                "slot": "3"
+              },
+              {
+                "label": "advanceReleased",
+                "type": "t_bool",
+                "offset": 7,
+                "slot": "3"
+              },
+              {
+                "label": "beneficiary",
+                "type": "t_address",
+                "offset": 8,
                 "slot": "3"
               }
             ],
